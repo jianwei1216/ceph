@@ -1194,6 +1194,7 @@ private:
 
   // -- superblock --
   OSDSuperblock superblock;
+  ceph::coarse_mono_clock::time_point last_trim_maps = ceph::coarse_mono_clock::zero();
 
   static void write_superblock(CephContext* cct,
                                OSDSuperblock& sb,
