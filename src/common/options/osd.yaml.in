@@ -1415,3 +1415,13 @@ options:
   level: dev
   default: true
   with_legacy: true
+- name: osd_use_pg_create_event
+  desc: use PgCreateEvt instead of NullEvt when receive MOSDPGCreate[2],
+    avoid to not reply MOSDPGCreated to mon when PG is Active status and
+    blocking mon trim OSDMaps.
+  type: bool
+  level: advanced
+  default: true
+  with_legacy: false
+  flags:
+  - runtime

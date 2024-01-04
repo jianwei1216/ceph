@@ -1265,6 +1265,7 @@ void OSDService::send_pg_created(pg_t pgid)
   auto o = get_osdmap();
   if (o->require_osd_release >= ceph_release_t::luminous) {
     pg_created.insert(pgid);
+    dout(20) << __func__ << " reply to mon " << pgid << " created." << dendl;
     monc->send_mon_message(new MOSDPGCreated(pgid));
   }
 }
@@ -1276,6 +1277,7 @@ void OSDService::send_pg_created()
   auto o = get_osdmap();
   if (o->require_osd_release >= ceph_release_t::luminous) {
     for (auto pgid : pg_created) {
+      dout(20) << __func__ << " reply to mon " << pgid << " created!" << dendl;
       monc->send_mon_message(new MOSDPGCreated(pgid));
     }
   }
@@ -9194,6 +9196,9 @@ void OSD::handle_fast_pg_create(MOSDPGCreate2 *m)
     m->put();
     return;
   }
+
+  auto is_pg_create_evt = cct->_conf.get_val<bool>("osd_use_pg_create_event");
+
   for (auto& p : m->pgs) {
     spg_t pgid = p.first;
     epoch_t created = p.second.first;
@@ -9220,7 +9225,7 @@ void OSD::handle_fast_pg_create(MOSDPGCreate2 *m)
 	    std::make_shared<PGPeeringEvent>(
 	      m->epoch,
 	      m->epoch,
-	      NullEvt(),
+	      is_pg_create_evt ? PgCreateEvt() : NullEvt(),
 	      true,
 	      new PGCreateInfo(
 		pgid,
