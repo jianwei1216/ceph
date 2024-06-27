@@ -30,6 +30,62 @@ using namespace std::placeholders;
 
 namespace ceph::osd::scheduler {
 
+static void log_mclock_add_op_stats(PerfCounters *logger, scheduler_id_t &id)
+{
+  if (!logger) {
+    return;
+  }
+
+  switch (id.class_id) {
+  case op_scheduler_class::immediate:
+    logger->inc(l_mclock_immediate_queue_len);
+    break;
+  case op_scheduler_class::client:
+    logger->inc(l_mclock_client_queue_len);
+    break;
+  case op_scheduler_class::background_store_db:
+    logger->inc(l_mclock_store_db_queue_len);
+    break;
+  case op_scheduler_class::background_recovery:
+    logger->inc(l_mclock_recovery_queue_len);
+    break;
+  case op_scheduler_class::background_best_effort:
+    logger->inc(l_mclock_best_effort_queue_len);
+    break;
+   default:
+    // should assert
+    break;
+  }
+}
+
+static void log_mclock_dec_op_stats(PerfCounters *logger, scheduler_id_t &id)
+{
+  if (!logger) {
+    return;
+  }
+
+  switch (id.class_id) {
+  case op_scheduler_class::immediate:
+    logger->dec(l_mclock_immediate_queue_len);
+    break;
+  case op_scheduler_class::client:
+    logger->dec(l_mclock_client_queue_len);
+    break;
+  case op_scheduler_class::background_store_db:
+    logger->dec(l_mclock_store_db_queue_len);
+    break;
+  case op_scheduler_class::background_recovery:
+    logger->dec(l_mclock_recovery_queue_len);
+    break;
+  case op_scheduler_class::background_best_effort:
+    logger->dec(l_mclock_best_effort_queue_len);
+    break;
+   default:
+    // should assert
+    break;
+  }
+}
+
 mClockScheduler::mClockScheduler(CephContext *cct,
   int whoami,
   uint32_t num_shards,
@@ -57,6 +113,7 @@ mClockScheduler::mClockScheduler(CephContext *cct,
   set_config_defaults_from_profile();
   client_registry.update_from_config(
     cct->_conf, osd_bandwidth_capacity_per_shard);
+  _init_logger();
 }
 
 /* ClientRegistry holds the dmclock::ClientInfo configuration parameters
@@ -406,6 +463,7 @@ void mClockScheduler::enqueue(OpSchedulerItem&& item)
       std::move(item),
       id,
       cost);
+    log_mclock_add_op_stats(logger, id);
   }
 
  dout(20) << __func__ << " client_count: " << scheduler.client_count()
@@ -446,6 +504,12 @@ void mClockScheduler::enqueue_high(unsigned priority,
   } else {
     high_priority[priority].push_front(std::move(item));
   }
+
+  scheduler_id_t id = scheduler_id_t {
+    op_scheduler_class::immediate,
+    client_profile_id_t()
+  };
+  log_mclock_add_op_stats(logger, id);
 }
 
 WorkItem mClockScheduler::dequeue()
@@ -461,6 +525,12 @@ WorkItem mClockScheduler::dequeue()
       high_priority.erase(iter);
     }
     ceph_assert(std::get_if<OpSchedulerItem>(&ret));
+
+    scheduler_id_t id = scheduler_id_t {
+      op_scheduler_class::immediate,
+      client_profile_id_t()
+    };
+    log_mclock_dec_op_stats(logger, id);
     return ret;
   } else {
     mclock_queue_t::PullReq result = scheduler.pull_request();
@@ -474,6 +544,7 @@ WorkItem mClockScheduler::dequeue()
       ceph_assert(result.is_retn());
 
       auto &retn = result.get_retn();
+      log_mclock_dec_op_stats(logger, retn.client);
       return std::move(*retn.request);
     }
   }
